@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"sort"
 	"time"
 )
@@ -74,18 +75,29 @@ type Player struct {
 
 type Scraper struct {
 	client *http.Client
+	proxy  string
 }
 
 func NewScraper() *Scraper {
+    proxy := os.Getenv("CORS_PROXY")
+    if proxy == "" {
+        // Fallback or user can set it
+        // proxy = "https://cors-anywhere.herokuapp.com/"
+    }
 	return &Scraper{
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
+        proxy: proxy,
 	}
 }
 
 func (s *Scraper) doRequest(url string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", url, nil)
+    targetURL := url
+    if s.proxy != "" {
+        targetURL = s.proxy + url
+    }
+	req, err := http.NewRequest("GET", targetURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -93,8 +105,6 @@ func (s *Scraper) doRequest(url string) (*http.Response, error) {
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
 	req.Header.Set("Referer", "https://www.sofascore.com/")
 	req.Header.Set("Origin", "https://www.sofascore.com")
-	req.Header.Set("Accept", "*/*")
-	req.Header.Set("Cache-Control", "max-age=0")
 
 	return s.client.Do(req)
 }

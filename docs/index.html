@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>gol.json - Live Soccer</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <style>
+        body { margin: 0; background: #000; height: 100vh; display: flex; flex-direction: column; }
+        #terminal { flex: 1; width: 100%; }
+        #status { color: #fff; padding: 5px; font-family: monospace; background: #333; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div id="status">
+        Loading gol.json... <br/>
+        Tip: To monitor a game, add ?id=EVENT_ID to the URL. <br/>
+        Make sure to visit <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank" style="color: #0cf;">cors-anywhere demo</a> to enable access if needed.
+    </div>
+    <div id="terminal"></div>
+    <script src="wasm_exec.js"></script>
+    <script>
+        const term = new Terminal({
+            cursorBlink: true,
+            theme: { background: '#1e1e1e' },
+            convertEol: true
+        });
+        term.open(document.getElementById('terminal'));
+
+        // Polyfill for wasm_exec.js expectations
+        if (!globalThis.fs) {
+            // Minimal fs mock if needed, but wasm_exec usually handles it
+        }
+
+        const go = new Go();
+        const urlParams = new URLSearchParams(window.location.search);
+        const eventId = urlParams.get('id') || "";
+
+        go.env = {
+            "EVENT_ID": eventId,
+            "USE_MOCK": urlParams.get('mock') || "0",
+            "CORS_PROXY": "https://cors-anywhere.herokuapp.com/"
+        };
+
+        WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+            document.getElementById('status').innerHTML = 'gol.json is running. (Monitoring ID: ' + (eventId || "None") + ')';
+            go.run(result.instance);
+        }).catch(err => {
+            document.getElementById('status').innerText = 'Error: ' + err.message;
+            console.error(err);
+        });
+    </script>
+</body>
+</html>
