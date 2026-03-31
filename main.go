@@ -16,43 +16,59 @@ type JsonOutput struct {
 }
 
 func main() {
-    // In WASM mode, we'll bypass the TUI and just let the user monitor a specific game
-    // or provide a simple list via fmt.Printf if we can.
-
-    // For now, let's just make a simple polling loop that doesn't use bubbletea.
-    // If the user wants to select a game, they can pass an ID.
+    fmt.Println("gol.json starting...")
 
     eventIDStr := os.Getenv("EVENT_ID")
+    useMock := os.Getenv("USE_MOCK") == "1"
+
     if eventIDStr == "" {
-        // List live games and exit
-        listGames()
+        fmt.Println("No EVENT_ID provided. Listing live games...")
+        listGames(useMock)
+        // In WASM, if main exits, the program stops.
+        // We should probably keep it alive if we want to support dynamic interactions later,
+        // but for a list it's fine to exit or just wait.
+        select {}
+    } else {
+        fmt.Printf("Monitoring Event ID: %s\n", eventIDStr)
+        pollGame(eventIDStr, useMock)
+    }
+}
+
+func listGames(useMock bool) {
+    s := NewScraper()
+    var events []Event
+    var err error
+
+    if useMock {
+        events = getMockEvents()
+    } else {
+        fmt.Println("Fetching live events from SofaScore (via proxy)...")
+        events, err = s.GetLiveEvents()
+    }
+
+    if err != nil {
+        fmt.Printf("Error fetching events: %v\n", err)
         return
     }
 
-    pollGame(eventIDStr)
-}
-
-func listGames() {
-    s := NewScraper()
-    events, err := s.GetLiveEvents()
-    if err != nil {
-        fmt.Printf("Error: %v\n", err)
+    if len(events) == 0 {
+        fmt.Println("No live games found.")
         return
     }
 
     groups := GroupByLeague(events)
     leagues := GetLeagueNames(groups)
 
-    fmt.Println("LIVE GAMES (Set EVENT_ID to monitor):")
     for _, l := range leagues {
-        fmt.Printf("\n--- %s ---\n", l)
+        fmt.Printf("\n[%s]\n", l)
         for _, e := range groups[l] {
-            fmt.Printf("[%d] %s %d - %d %s\n", e.ID, e.HomeTeam.Name, e.HomeScore.Current, e.AwayScore.Current, e.AwayTeam.Name)
+            fmt.Printf("  ID: %d | %s %d - %d %s\n", e.ID, e.HomeTeam.Name, e.HomeScore.Current, e.AwayScore.Current, e.AwayTeam.Name)
         }
     }
+    fmt.Println("\nTo monitor a specific game, refresh with ?id=ID")
 }
 
-func pollGame(eventIDStr string) {
+func pollGame(eventIDStr string, useMock bool) {
     var eventID int64
     fmt.Sscanf(eventIDStr, "%d", &eventID)
 
@@ -61,16 +77,37 @@ func pollGame(eventIDStr string) {
     defer ticker.Stop()
 
     for {
-        event, err := s.GetEventDetails(eventID)
-        if err != nil {
-            fmt.Printf("Error: %v\n", err)
+        var event *Event
+        var err error
+
+        if useMock {
+            es := getMockEvents()
+            for _, e := range es {
+                if e.ID == eventID {
+                    event = &e
+                    break
+                }
+            }
         } else {
-            incidents, _ := s.GetIncidents(eventID)
+            event, err = s.GetEventDetails(eventID)
+        }
+
+        if err != nil {
+            fmt.Printf("Error fetching details: %v\n", err)
+        } else if event == nil {
+            fmt.Printf("Event ID %d not found.\n", eventID)
+        } else {
+            var incidents []Incident
+            if useMock {
+                incidents = getMockIncidents(eventID)
+            } else {
+                incidents, _ = s.GetIncidents(eventID)
+            }
+
             out := JsonOutput{
                 Score: fmt.Sprintf("%s %d-%d %s", event.HomeTeam.Name, event.HomeScore.Current, event.AwayScore.Current, event.AwayTeam.Name),
             }
 
-            // Minute logic
             now := time.Now().Unix()
             elapsed := int(now - event.StatusTime.Timestamp)
             if elapsed < 0 { elapsed = 0 }
@@ -102,10 +139,12 @@ func pollGame(eventIDStr string) {
                     }
                 }
             }
-            out.RedCards = strings.Join(reds, ", ")
-            out.YellowCards = strings.Join(yellows, ", ")
+            if len(reds) > 0 { out.RedCards = strings.Join(reds, ", ") }
+            if len(yellows) > 0 { out.YellowCards = strings.Join(yellows, ", ") }
 
             b, _ := json.MarshalIndent(out, "", "  ")
+            // Clear screen (ANSI)
+            fmt.Print("\033[H\033[2J")
             fmt.Println(string(b))
         }
         <-ticker.C

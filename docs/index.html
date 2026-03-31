@@ -15,7 +15,7 @@
     <div id="status">
         Loading gol.json... <br/>
         Tip: To monitor a game, add ?id=EVENT_ID to the URL. <br/>
-        Make sure to visit <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank" style="color: #0cf;">cors-anywhere demo</a> to enable access if needed.
+        Make sure to visit <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank" style="color: #0cf;">cors-anywhere demo</a> to enable access.
     </div>
     <div id="terminal"></div>
     <script src="wasm_exec.js"></script>
@@ -23,30 +23,69 @@
         const term = new Terminal({
             cursorBlink: true,
             theme: { background: '#1e1e1e' },
-            convertEol: true
+            convertEol: true,
+            fontFamily: 'monospace'
         });
         term.open(document.getElementById('terminal'));
 
-        // Polyfill for wasm_exec.js expectations
-        if (!globalThis.fs) {
-            // Minimal fs mock if needed, but wasm_exec usually handles it
-        }
+        // Comprehensive fs mock for Go WASM stdout/stderr
+        const decoder = new TextDecoder("utf-8");
+        globalThis.fs = {
+            writeSync(fd, buf) {
+                term.write(decoder.decode(buf));
+                return buf.length;
+            },
+            write(fd, buf, offset, length, position, callback) {
+                if (offset !== 0 || length !== buf.length || position !== null) {
+                    throw new Error("not implemented");
+                }
+                const n = this.writeSync(fd, buf);
+                callback(null, n);
+            },
+            chmod(path, mode, callback) { callback(null); },
+            chown(path, uid, gid, callback) { callback(null); },
+            close(fd, callback) { callback(null); },
+            fchmod(fd, mode, callback) { callback(null); },
+            fchown(fd, uid, gid, callback) { callback(null); },
+            fstat(fd, callback) { callback(null, { isDirectory: () => false }); },
+            fsync(fd, callback) { callback(null); },
+            ftruncate(fd, length, callback) { callback(null); },
+            lchown(path, uid, gid, callback) { callback(null); },
+            link(path, link, callback) { callback(null); },
+            lstat(path, callback) { callback(null, { isDirectory: () => false }); },
+            mkdir(path, mode, callback) { callback(null); },
+            open(path, flags, mode, callback) { callback(new Error("not implemented")); },
+            read(fd, buf, offset, length, position, callback) { callback(new Error("not implemented")); },
+            readdir(path, callback) { callback(new Error("not implemented")); },
+            readlink(path, callback) { callback(new Error("not implemented")); },
+            rename(from, to, callback) { callback(null); },
+            rmdir(path, callback) { callback(null); },
+            stat(path, callback) { callback(null, { isDirectory: () => false }); },
+            symlink(path, link, callback) { callback(null); },
+            truncate(path, length, callback) { callback(null); },
+            unlink(path, callback) { callback(null); },
+            utimes(path, atime, mtime, callback) { callback(null); },
+        };
 
         const go = new Go();
         const urlParams = new URLSearchParams(window.location.search);
         const eventId = urlParams.get('id') || "";
+        const mock = urlParams.get('mock') || "0";
 
+        // Pass environment variables to Go
         go.env = {
             "EVENT_ID": eventId,
-            "USE_MOCK": urlParams.get('mock') || "0",
+            "USE_MOCK": mock,
             "CORS_PROXY": "https://cors-anywhere.herokuapp.com/"
         };
 
+        term.writeln('Instantiating WebAssembly...');
         WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
-            document.getElementById('status').innerHTML = 'gol.json is running. (Monitoring ID: ' + (eventId || "None") + ')';
+            document.getElementById('status').innerHTML = 'gol.json is running. (Monitoring ID: ' + (eventId || "None") + ') | Mock: ' + mock;
             go.run(result.instance);
         }).catch(err => {
             document.getElementById('status').innerText = 'Error: ' + err.message;
+            term.writeln('\x1b[31mError: ' + err.message + '\x1b[0m');
             console.error(err);
         });
     </script>
