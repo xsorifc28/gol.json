@@ -101,6 +101,8 @@ func (s *Scraper) doRequest(url string) (*http.Response, error) {
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
 	req.Header.Set("Referer", "https://www.sofascore.com/")
 	req.Header.Set("Origin", "https://www.sofascore.com")
+    // Required by cors-anywhere
+    req.Header.Set("X-Requested-With", "XMLHttpRequest")
 
 	resp, err := s.client.Do(req)
     if err != nil {
@@ -115,7 +117,6 @@ func (s *Scraper) doRequest(url string) (*http.Response, error) {
 }
 
 func (s *Scraper) GetLiveEvents() ([]Event, error) {
-    // Try live endpoint first
 	resp, err := s.doRequest("https://api.sofascore.com/api/v1/sport/football/events/live")
 	if err == nil && resp.StatusCode == 200 {
 		defer resp.Body.Close()
@@ -125,7 +126,6 @@ func (s *Scraper) GetLiveEvents() ([]Event, error) {
 		}
 	}
 
-    // Fallback: today's events
     today := time.Now().Format("2006-01-02")
     fmt.Printf("[API] Falling back to scheduled events for %s\n", today)
     url := fmt.Sprintf("https://api.sofascore.com/api/v1/sport/football/scheduled-events/%s", today)
@@ -140,7 +140,6 @@ func (s *Scraper) GetLiveEvents() ([]Event, error) {
         return nil, err
     }
 
-    // Filter for live only if we want, or show all
     var liveOnly []Event
     for _, e := range data.Events {
         if e.Status.Type == "inprogress" {
