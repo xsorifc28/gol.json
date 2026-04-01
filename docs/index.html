@@ -15,7 +15,7 @@
 <body>
     <div id="status">
         <b>GOL.JSON</b> | Status: <span id="run-status">Initializing...</span> <br/>
-        Tip: Visit <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank">corsdemo</a> to enable proxy access. |
+        Using Proxy: <code>http://cors-anywhere.com/</code> |
         Add <code>?id=EVENT_ID</code> to monitor a specific match. |
         Add <code>?mock=1</code> for demonstration.
     </div>
@@ -94,10 +94,11 @@
         const eventId = urlParams.get('id') || "";
         const mock = urlParams.get('mock') || "0";
 
+        // Update to the correct proxy requested by the user
         go.env = {
             "EVENT_ID": eventId,
             "USE_MOCK": mock,
-            "CORS_PROXY": "https://cors-anywhere.herokuapp.com/"
+            "CORS_PROXY": "http://cors-anywhere.com/"
         };
 
         term.writeln('Instantiating WebAssembly...');
