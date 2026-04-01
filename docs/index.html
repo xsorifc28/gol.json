@@ -15,7 +15,7 @@
 <body>
     <div id="status">
         <b>GOL.JSON</b> | Status: <span id="run-status">Initializing...</span> <br/>
-        Using Proxy: <code>http://cors-anywhere.com/</code> |
+        Using Proxy: <code>https://cors-anywhere.com/</code> |
         Add <code>?id=EVENT_ID</code> to monitor a specific match. |
         Add <code>?mock=1</code> for demonstration.
     </div>
@@ -98,7 +98,7 @@
         go.env = {
             "EVENT_ID": eventId,
             "USE_MOCK": mock,
-            "CORS_PROXY": "http://cors-anywhere.com/"
+            "CORS_PROXY": "https://cors-anywhere.com/"
         };
 
         term.writeln('Instantiating WebAssembly...');
