@@ -6,16 +6,18 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
     <style>
-        body { margin: 0; background: #000; height: 100vh; display: flex; flex-direction: column; }
+        body { margin: 0; background: #000; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         #terminal { flex: 1; width: 100%; }
-        #status { color: #fff; padding: 5px; font-family: monospace; background: #333; font-size: 12px; }
+        #status { color: #0f0; padding: 10px; font-family: monospace; background: #222; font-size: 13px; border-bottom: 1px solid #444; line-height: 1.4; }
+        a { color: #0cf; }
     </style>
 </head>
 <body>
     <div id="status">
-        Loading gol.json... <br/>
-        Tip: To monitor a game, add ?id=EVENT_ID to the URL. <br/>
-        Make sure to visit <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank" style="color: #0cf;">cors-anywhere demo</a> to enable access.
+        <b>GOL.JSON</b> | Status: <span id="run-status">Initializing...</span> <br/>
+        Tip: Visit <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank">corsdemo</a> to enable proxy access. |
+        Add <code>?id=EVENT_ID</code> to monitor a specific match. |
+        Add <code>?mock=1</code> for demonstration.
     </div>
     <div id="terminal"></div>
     <script src="wasm_exec.js"></script>
@@ -24,7 +26,8 @@
             cursorBlink: true,
             theme: { background: '#1e1e1e' },
             convertEol: true,
-            fontFamily: 'monospace'
+            fontFamily: 'monospace',
+            fontSize: 14
         });
         term.open(document.getElementById('terminal'));
 
@@ -40,7 +43,7 @@
                 pid: -1,
                 ppid: -1,
                 umask() { throw new Error("not implemented"); },
-                cwd() { throw new Error("not implemented"); },
+                cwd() { return "/"; },
                 chdir() { throw new Error("not implemented"); },
             };
         }
@@ -99,10 +102,12 @@
 
         term.writeln('Instantiating WebAssembly...');
         WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
-            document.getElementById('status').innerHTML = 'gol.json is running. (Monitoring ID: ' + (eventId || "None") + ') | Mock: ' + mock;
+            document.getElementById('run-status').innerHTML = 'Running' + (eventId ? ' (Monitoring ID: ' + eventId + ')' : ' (Listing matches)');
+            if (mock === "1") document.getElementById('run-status').innerHTML += ' [MOCK MODE]';
             go.run(result.instance);
         }).catch(err => {
-            document.getElementById('status').innerText = 'Error: ' + err.message;
+            document.getElementById('run-status').innerText = 'Error: ' + err.message;
+            document.getElementById('run-status').style.color = 'red';
             term.writeln('\x1b[31mError: ' + err.message + '\x1b[0m');
             console.error(err);
         });

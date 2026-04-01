@@ -62,9 +62,9 @@ type IncidentResponse struct {
 type Incident struct {
 	Type          string `json:"type"`
 	Player        Player `json:"player"`
-	IncidentClass string `json:"incidentClass"` // "home" or "away"
-	IncidentType  string `json:"incidentType"`  // "card", "goal", etc.
-	CardType      string `json:"cardType"`      // "Yellow", "Red", "YellowRed"
+	IncidentClass string `json:"incidentClass"`
+	IncidentType  string `json:"incidentType"`
+	CardType      string `json:"cardType"`
 	Time          int    `json:"time"`
 	AddedTime     int    `json:"addedTime"`
 }
@@ -79,24 +79,20 @@ type Scraper struct {
 }
 
 func NewScraper() *Scraper {
-    proxy := os.Getenv("CORS_PROXY")
-    if proxy == "" {
-        // Fallback or user can set it
-        // proxy = "https://cors-anywhere.herokuapp.com/"
-    }
 	return &Scraper{
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 15 * time.Second,
 		},
-        proxy: proxy,
+		proxy: os.Getenv("CORS_PROXY"),
 	}
 }
 
 func (s *Scraper) doRequest(url string) (*http.Response, error) {
-    targetURL := url
-    if s.proxy != "" {
-        targetURL = s.proxy + url
-    }
+	targetURL := url
+	if s.proxy != "" {
+		targetURL = s.proxy + url
+	}
+	fmt.Printf("[API] Fetching: %s\n", targetURL)
 	req, err := http.NewRequest("GET", targetURL, nil)
 	if err != nil {
 		return nil, err
@@ -106,24 +102,55 @@ func (s *Scraper) doRequest(url string) (*http.Response, error) {
 	req.Header.Set("Referer", "https://www.sofascore.com/")
 	req.Header.Set("Origin", "https://www.sofascore.com")
 
-	return s.client.Do(req)
+	resp, err := s.client.Do(req)
+    if err != nil {
+        return nil, err
+    }
+
+    if resp.StatusCode != 200 {
+        fmt.Printf("[API] Warning: Status %d for %s\n", resp.StatusCode, url)
+    }
+
+    return resp, nil
 }
 
 func (s *Scraper) GetLiveEvents() ([]Event, error) {
+    // Try live endpoint first
 	resp, err := s.doRequest("https://api.sofascore.com/api/v1/sport/football/events/live")
-	if err != nil {
-		return nil, err
+	if err == nil && resp.StatusCode == 200 {
+		defer resp.Body.Close()
+		var data EventResponse
+		if err := json.NewDecoder(resp.Body).Decode(&data); err == nil {
+			return data.Events, nil
+		}
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode == 403 {
-		return nil, fmt.Errorf("access denied (403 Forbidden)")
-	}
+    // Fallback: today's events
+    today := time.Now().Format("2006-01-02")
+    fmt.Printf("[API] Falling back to scheduled events for %s\n", today)
+    url := fmt.Sprintf("https://api.sofascore.com/api/v1/sport/football/scheduled-events/%s", today)
+    resp, err = s.doRequest(url)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
 
-	var data EventResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return nil, err
-	}
+    var data EventResponse
+    if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+        return nil, err
+    }
+
+    // Filter for live only if we want, or show all
+    var liveOnly []Event
+    for _, e := range data.Events {
+        if e.Status.Type == "inprogress" {
+            liveOnly = append(liveOnly, e)
+        }
+    }
+
+    if len(liveOnly) > 0 {
+        return liveOnly, nil
+    }
 
 	return data.Events, nil
 }

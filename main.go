@@ -18,15 +18,18 @@ type JsonOutput struct {
 func main() {
     fmt.Println("gol.json starting...")
 
+    proxy := os.Getenv("CORS_PROXY")
+    if proxy != "" {
+        fmt.Printf("Using CORS Proxy: %s\n", proxy)
+    } else {
+        fmt.Println("Warning: No CORS_PROXY set. Requests will likely fail in browser.")
+    }
+
     eventIDStr := os.Getenv("EVENT_ID")
     useMock := os.Getenv("USE_MOCK") == "1"
 
     if eventIDStr == "" {
-        fmt.Println("No EVENT_ID provided. Listing live games...")
         listGames(useMock)
-        // In WASM, if main exits, the program stops.
-        // We should probably keep it alive if we want to support dynamic interactions later,
-        // but for a list it's fine to exit or just wait.
         select {}
     } else {
         fmt.Printf("Monitoring Event ID: %s\n", eventIDStr)
@@ -40,32 +43,39 @@ func listGames(useMock bool) {
     var err error
 
     if useMock {
+        fmt.Println("Using mock data...")
         events = getMockEvents()
     } else {
-        fmt.Println("Fetching live events from SofaScore (via proxy)...")
+        fmt.Println("Fetching games from SofaScore...")
         events, err = s.GetLiveEvents()
     }
 
     if err != nil {
-        fmt.Printf("Error fetching events: %v\n", err)
+        fmt.Printf("\nError fetching events: %v\n", err)
+        fmt.Println("Check if the proxy is working and if you have authorized access at https://cors-anywhere.herokuapp.com/corsdemo")
         return
     }
 
     if len(events) == 0 {
-        fmt.Println("No live games found.")
+        fmt.Println("\nNo games found (live or scheduled for today).")
         return
     }
 
+    fmt.Printf("\nFound %d games.\n", len(events))
     groups := GroupByLeague(events)
     leagues := GetLeagueNames(groups)
 
     for _, l := range leagues {
         fmt.Printf("\n[%s]\n", l)
         for _, e := range groups[l] {
-            fmt.Printf("  ID: %d | %s %d - %d %s\n", e.ID, e.HomeTeam.Name, e.HomeScore.Current, e.AwayScore.Current, e.AwayTeam.Name)
+            statusPrefix := ""
+            if e.Status.Type == "inprogress" {
+                statusPrefix = "* LIVE * "
+            }
+            fmt.Printf("  ID: %d | %s%s %d - %d %s (%s)\n", e.ID, statusPrefix, e.HomeTeam.Name, e.HomeScore.Current, e.AwayScore.Current, e.AwayTeam.Name, e.Status.Description)
         }
     }
-    fmt.Println("\nTo monitor a specific game, refresh with ?id=ID")
+    fmt.Println("\nTo monitor a specific game, refresh the page with ?id=ID")
 }
 
 func pollGame(eventIDStr string, useMock bool) {
@@ -143,7 +153,6 @@ func pollGame(eventIDStr string, useMock bool) {
             if len(yellows) > 0 { out.YellowCards = strings.Join(yellows, ", ") }
 
             b, _ := json.MarshalIndent(out, "", "  ")
-            // Clear screen (ANSI)
             fmt.Print("\033[H\033[2J")
             fmt.Println(string(b))
         }
