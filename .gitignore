@@ -1,1 +1,7 @@
 node_modules
+dist
+docs/assets
+docs/*.js
+docs/*.css
+*.log
+.DS_Store

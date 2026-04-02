@@ -1,8 +1,7 @@
 import axios from 'axios';
 import { connect, JSONCodec } from 'nats.ws';
 
-// Using corsproxy.io as it doesn't require manual activation for local development/testing
-const PROXY_URL = 'https://corsproxy.io/?url=';
+// Electron environment handles CORS and session-level headers
 const HOSTS = ['www.sofascore.com', 'api.sofascore.com', 'api.sofascore.app'];
 
 export class SofascoreService {
@@ -11,7 +10,7 @@ export class SofascoreService {
     for (const host of HOSTS) {
       try {
         const url = `https://${host}/api/v1${endpoint}`;
-        const response = await axios.get(PROXY_URL + encodeURIComponent(url), {
+        const response = await axios.get(url, {
           headers: {
             'X-Requested-With': 'XMLHttpRequest'
           }
