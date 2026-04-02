@@ -11,6 +11,7 @@ const selectedEvent = ref(null);
 const incidents = ref([]);
 const collapsedLeagues = ref(new Set());
 const pollingInterval = ref(null);
+const natsConnection = ref(null);
 
 const leagues = computed(() => {
   const groups = {};
@@ -90,8 +91,64 @@ function toggleLeague(name) {
   else collapsedLeagues.value.add(name);
 }
 
-onMounted(fetchGames);
-onUnmounted(() => { if (pollingInterval.value) clearInterval(pollingInterval.value); });
+function handleLiveUpdate(update) {
+  if (!update || !update.id) return;
+  const eventId = update.id;
+
+  const mergeUpdate = (target) => {
+    Object.keys(update).forEach(key => {
+      if (key === 'id') return;
+      if (key.includes('.')) {
+        const parts = key.split('.');
+        let current = target;
+        for (let i = 0; i < parts.length - 1; i++) {
+          if (!current[parts[i]]) current[parts[i]] = {};
+          current = current[parts[i]];
+        }
+        current[parts[parts.length - 1]] = update[key];
+      } else {
+        target[key] = update[key];
+      }
+    });
+  };
+
+  // Update selected event if it matches
+  if (selectedEvent.value && selectedEvent.value.id === eventId) {
+    mergeUpdate(selectedEvent.value);
+
+    // Trigger update for incidents or if status changed significantly
+    const hasSignificantUpdate = Object.keys(update).some(k =>
+      k.startsWith('homeScore') ||
+      k.startsWith('awayScore') ||
+      k.startsWith('status') ||
+      k.startsWith('cardsCode')
+    );
+
+    if (hasSignificantUpdate) {
+       updateLiveMatch();
+    }
+  }
+
+  // Update event in the list
+  const eventInList = events.value.find(e => e.id === eventId);
+  if (eventInList) {
+    mergeUpdate(eventInList);
+  }
+}
+
+onMounted(async () => {
+  await fetchGames();
+  try {
+    natsConnection.value = await sofascore.subscribeToUpdates(handleLiveUpdate);
+  } catch (err) {
+    console.error("Failed to connect to NATS for live updates:", err);
+  }
+});
+
+onUnmounted(() => {
+  if (pollingInterval.value) clearInterval(pollingInterval.value);
+  if (natsConnection.value) natsConnection.value.close();
+});
 </script>
 
 <template>

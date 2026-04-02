@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { connect, JSONCodec } from 'nats.ws';
 
 // Using corsproxy.io as it doesn't require manual activation for local development/testing
 const PROXY_URL = 'https://corsproxy.io/?url=';
@@ -45,6 +46,36 @@ export class SofascoreService {
   async getIncidents(eventId) {
     const data = await this.fetchWithFallback(`/event/${eventId}/incidents`);
     return data.incidents || [];
+  }
+
+  async subscribeToUpdates(onUpdate) {
+    const jc = JSONCodec();
+    try {
+      const nc = await connect({
+        servers: ['wss://ws.sofascore.com:9222'],
+        user: 'none',
+        password: 'none',
+        reconnect: true,
+        maxReconnectAttempts: -1,
+        waitOnFirstConnect: true,
+      });
+
+      const sub = nc.subscribe('sport.>');
+      (async () => {
+        for await (const m of sub) {
+          try {
+            const data = jc.decode(m.data);
+            onUpdate(data);
+          } catch (e) {
+            console.error('Error decoding NATS message:', e);
+          }
+        }
+      })();
+      return nc;
+    } catch (err) {
+      console.error('NATS connection error:', err);
+      throw err;
+    }
   }
 }
 
