@@ -107,7 +107,6 @@ onUnmounted(() => { if (pollingInterval.value) clearInterval(pollingInterval.val
     </header>
     <div v-if="error" class="bg-red-900/30 border border-red-500 text-red-200 p-4 rounded-lg mb-6 text-sm">
       {{ error }}
-      <a href="https://cors-anywhere.com/corsdemo" target="_blank" class="underline ml-2">cors-anywhere demo</a>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
       <div class="flex flex-col gap-4 overflow-y-auto max-h-[70vh]">
